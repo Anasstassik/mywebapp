@@ -1,0 +1,4 @@
+{
+  "port": 5000,
+  "database_url": "postgresql://postgres:postgres@localhost:5432/notesdb"
+}
