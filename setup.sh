@@ -1,127 +1,134 @@
 #!/bin/bash
 
+# Зупиняємо скрипт, якщо десь виникне помилка
 set -e
 
+echo "Починаємо встановлення та налаштування сервера..."
+
+# 1. Встановлення необхідних пакетів (Node.js, Nginx, PostgreSQL)
+echo "Встановлюємо Nginx, PostgreSQL та залежності..."
 apt-get update
-apt-get install -y curl dirmngr apt-transport-https lsb-release ca-certificates
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs postgresql postgresql-contrib nginx sudo git
+apt-get install -y curl sudo nginx postgresql postgresql-contrib
 
-useradd -m -s /bin/bash -G sudo student
+echo "Встановлюємо Node.js..."
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+apt-get install -y nodejs
 
-useradd -m -s /bin/bash -G sudo teacher
-echo "teacher:12345678" | chpasswd
-chage -d 0 teacher
+# 2. Створення користувачів за вимогами методички
+echo "Налаштовуємо користувачів системи..."
 
-useradd -r -s /bin/false app
+# Користувач student (адміністративні права)
+if ! id -u student > /dev/null 2>&1; then
+    useradd -m -s /bin/bash -G sudo student
+    echo "student:student123" | chpasswd
+fi
 
-useradd -m -s /bin/bash operator
-echo "operator:12345678" | chpasswd
-chage -d 0 operator
+# Користувач teacher (адміністративні права, зміна пароля при першому вході)
+if ! id -u teacher > /dev/null 2>&1; then
+    useradd -m -s /bin/bash -G sudo teacher
+    echo "teacher:12345678" | chpasswd
+    chage -d 0 teacher
+fi
 
+# Користувач app (системний користувач, від якого запускається застосунок)
+if ! id -u app > /dev/null 2>&1; then
+    useradd -r -s /bin/false app
+fi
+
+# Користувач operator (обмежений доступ, зміна пароля при першому вході)
+if ! id -u operator > /dev/null 2>&1; then
+    # Розумна перевірка на існування групи operator (щоб уникнути помилки)
+    if getent group operator > /dev/null; then
+        useradd -m -s /bin/bash -g operator operator
+    else
+        useradd -m -s /bin/bash operator
+    fi
+    echo "operator:12345678" | chpasswd
+    chage -d 0 operator
+fi
+
+# Налаштовуємо жорсткі права для operator через sudoers
 cat <<EOF > /etc/sudoers.d/operator
-operator ALL=(ALL) /bin/systemctl start mywebapp.service
-operator ALL=(ALL) /bin/systemctl stop mywebapp.service
-operator ALL=(ALL) /bin/systemctl restart mywebapp.service
-operator ALL=(ALL) /bin/systemctl status mywebapp.service
-operator ALL=(ALL) /usr/sbin/nginx -s reload
-operator ALL=(ALL) /bin/systemctl reload nginx
+operator ALL=(ALL) NOPASSWD: /bin/systemctl start mywebapp, /bin/systemctl stop mywebapp, /bin/systemctl restart mywebapp, /bin/systemctl status mywebapp, /bin/systemctl reload nginx
 EOF
 chmod 0440 /etc/sudoers.d/operator
 
-echo "9" > /home/student/gradebook
-chown student:student /home/student/gradebook
+# 3. Налаштування бази даних PostgreSQL
+echo "Налаштовуємо базу даних..."
+sudo -u postgres psql -c "CREATE USER dbuser WITH PASSWORD 'dbpassword';" || true
+sudo -u postgres psql -c "CREATE DATABASE notes_db OWNER dbuser;" || true
 
-su - postgres -c "psql -c \"CREATE USER postgres WITH PASSWORD '12345';\""
-su - postgres -c "psql -c \"ALTER USER postgres WITH SUPERUSER;\""
-su - postgres -c "psql -c \"CREATE DATABASE notesdb OWNER postgres;\""
+# 4. Налаштування застосунку mywebapp
+APP_DIR="/opt/mywebapp"
+echo "Копіюємо файли застосунку в $APP_DIR..."
 
-passwd -l ubuntu || true
-passwd -l root || true
+mkdir -p $APP_DIR
+# Копіюємо всі файли з поточної папки
+cp -r ./* $APP_DIR/
+cd $APP_DIR
 
-mkdir -p /opt/mywebapp
-chown -R app:app /opt/mywebapp
+echo "Встановлюємо залежності Node.js..."
+npm install
 
-mkdir -p /etc/mywebapp
-cat <<EOF > /etc/mywebapp/config.json
-{
-  "port": 5000,
-  "database_url": "postgresql://postgres:12345@localhost:5432/notesdb"
-}
-EOF
-chown -R app:app /etc/mywebapp
+echo "Застосовуємо міграції бази даних Prisma..."
+export DATABASE_URL="postgresql://dbuser:dbpassword@localhost:5432/notes_db"
+npx prisma generate
+npx prisma migrate deploy
 
-cat <<EOF > /etc/nginx/sites-available/mywebapp
-server {
-    listen 80;
-    server_name _;
+# Передаємо права на папку службовому користувачу app
+chown -R app:app $APP_DIR
 
-    access_log /var/log/nginx/mywebapp.access.log;
-    error_log /var/log/nginx/mywebapp.error.log;
-
-    location = / {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-    }
-
-    location /notes {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-    }
-
-    location / {
-        return 404;
-    }
-}
-EOF
-
-ln -s /etc/nginx/sites-available/mywebapp /etc/nginx/sites-enabled/ || true
-rm -f /etc/nginx/sites-enabled/default
-systemctl restart nginx
-
-cat <<EOF > /etc/systemd/system/mywebapp.socket
-[Unit]
-Description=MyWebApp Socket
-
-[Socket]
-ListenStream=5000
-NoDelay=true
-
-[Install]
-WantedBy=sockets.target
-EOF
-
+# 5. Налаштування Systemd сервісу
+echo "Створюємо системний сервіс..."
 cat <<EOF > /etc/systemd/system/mywebapp.service
 [Unit]
-Description=MyWebApp Notes Service
+Description=My Web App (Notes Service)
 After=network.target postgresql.service
-Requires=postgresql.service mywebapp.socket
 
 [Service]
+Environment=PORT=5000
+Environment=DATABASE_URL="postgresql://dbuser:dbpassword@localhost:5432/notes_db"
 Type=simple
 User=app
-Group=app
-WorkingDirectory=/opt/mywebapp
-Environment="DATABASE_URL=postgresql://postgres:12345@localhost:5432/notesdb"
-Environment="PORT=5000"
-ExecStartPre=/usr/bin/npx prisma migrate deploy
+WorkingDirectory=$APP_DIR
 ExecStart=/usr/bin/node server.js
-NonBlocking=true
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl disable mywebapp.service || true
-systemctl stop mywebapp.service || true
-systemctl enable mywebapp.socket
-systemctl start mywebapp.socket
+systemctl enable mywebapp
+systemctl restart mywebapp
 
-cp -r ./* /opt/mywebapp/
-cd /opt/mywebapp
-npm install
-chown -R app:app /opt/mywebapp
-systemctl restart mywebapp.socket
+# 6. Налаштування Nginx (Reverse Proxy)
+echo "Налаштовуємо Nginx (Reverse Proxy на 80 порт)..."
+cat <<EOF > /etc/nginx/sites-available/mywebapp
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_pass http://localhost:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+    }
+}
+EOF
+
+# Вмикаємо конфіг і видаляємо дефолтний
+ln -sf /etc/nginx/sites-available/mywebapp /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+systemctl restart nginx
+
+# 7. Фінальний штрих (створення файлу gradebook з номером варіанту)
+if [ -d "/home/student" ]; then
+    echo "9" > /home/student/gradebook
+    chown student:student /home/student/gradebook
+fi
+
+echo "Встановлення успішно завершено! Застосунок працює та доступний."
