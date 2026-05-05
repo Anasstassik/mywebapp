@@ -5,13 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 const configPath = fs.existsSync('/etc/mywebapp/config.json') ? '/etc/mywebapp/config.json' : './config.json';
 const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
-const prisma = new PrismaClient({
-    datasources: {
-        db: {
-            url: config.database_url
-        }
-    }
-});
+const prisma = new PrismaClient();
 
 const app = express();
 
@@ -110,6 +104,7 @@ app.get('/notes/:id', async (req, res) => {
     }
 });
 
-app.listen(config.port, () => {
-    console.log(`MyWebApp is running on port ${config.port}`);
+const port = process.env.PORT || config.port || 5000;
+app.listen(port, () => {
+    console.log(`MyWebApp is running on port ${port}`);
 });
