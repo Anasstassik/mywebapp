@@ -67,6 +67,9 @@ mkdir -p $APP_DIR
 cp -r ./* $APP_DIR/
 cd $APP_DIR
 
+# НОВИЙ ФІКС: Примусово створюємо правильний .env для сервера, щоб перебити будь-який кеш
+echo 'DATABASE_URL="postgresql://dbuser:dbpassword@localhost:5432/notes_db"' > .env
+
 echo "Встановлюємо залежності Node.js..."
 npm install
 
