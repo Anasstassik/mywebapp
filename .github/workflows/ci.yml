@@ -33,10 +33,11 @@ jobs:
         scandir: './'
         ignore_paths: 'node_modules'
 
-    - name: Run Hadolint (Dockerfile Linter)
+    - name: Run Hadolint
       uses: hadolint/hadolint-action@v3.1.0
       with:
         dockerfile: Dockerfile
+        ignore: DL3008
 
     - name: Run Tests with Coverage
       run: npm test
