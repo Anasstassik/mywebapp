@@ -86,3 +86,22 @@ jobs:
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: build-and-push
+    if: github.event_name == 'push'
+    runs-on: self-hosted
+    steps:
+    - name: Log in to GitHub Container Registry
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+    - name: Pull the Docker image
+      run: docker pull ghcr.io/${{ github.repository_owner }}/mywebapp:latest
+
+    - name: Stop and remove old container
+      run: |
+        docker stop myapp || true
+        docker rm myapp || true
+
+    - name: Run the new container
+      run: docker run -d -p 5000:5000 --name myapp ghcr.io/${{ github.repository_owner }}/mywebapp:latest
