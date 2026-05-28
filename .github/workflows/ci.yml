@@ -31,6 +31,7 @@ jobs:
       uses: ludeeus/action-shellcheck@master
       with:
         scandir: './'
+        ignore_paths: 'node_modules'
 
     - name: Run Hadolint (Dockerfile Linter)
       uses: hadolint/hadolint-action@v3.1.0
