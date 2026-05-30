@@ -41,8 +41,25 @@ resource "libvirt_domain" "worker" {
   name    = "lab4-worker"
   type    = "qemu"
   machine = "pc"
+  arch    = "x86_64"
   memory  = "1024"
   vcpu    = 1
+
+  xml {
+    xslt = <<-EOT
+      <?xml version="1.0" ?>
+      <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+        <xsl:template match="/domain/@type">
+          <xsl:attribute name="type">qemu</xsl:attribute>
+        </xsl:template>
+        <xsl:template match="@*|node()">
+          <xsl:copy>
+            <xsl:apply-templates select="@*|node()"/>
+          </xsl:copy>
+        </xsl:template>
+      </xsl:stylesheet>
+    EOT
+  }
 
   cloudinit = libvirt_cloudinit_disk.commoninit.id
 
@@ -81,8 +98,25 @@ resource "libvirt_domain" "db" {
   name    = "lab4-db"
   type    = "qemu"
   machine = "pc"
+  arch    = "x86_64"
   memory  = "1024"
   vcpu    = 1
+
+  xml {
+    xslt = <<-EOT
+      <?xml version="1.0" ?>
+      <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+        <xsl:template match="/domain/@type">
+          <xsl:attribute name="type">qemu</xsl:attribute>
+        </xsl:template>
+        <xsl:template match="@*|node()">
+          <xsl:copy>
+            <xsl:apply-templates select="@*|node()"/>
+          </xsl:copy>
+        </xsl:template>
+      </xsl:stylesheet>
+    EOT
+  }
 
   cloudinit = libvirt_cloudinit_disk.commoninit.id
 
