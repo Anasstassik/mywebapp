@@ -1,0 +1,17 @@
+[Unit]
+Description=My Web App
+After=network.target
+
+[Service]
+Environment=PORT={{ webapp_port }}
+Environment=HOST=127.0.0.1
+Environment=DB_HOST={{ hostvars[groups['db'][0]]['ansible_host'] }}
+Environment=DB_PORT={{ db_port }}
+Type=simple
+User=app
+WorkingDirectory=/opt/webapp
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

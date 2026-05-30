@@ -1,0 +1,46 @@
+---
+- name: Install PostgreSQL
+  apt:
+    name: postgresql
+    state: present
+    update_cache: yes
+
+- name: Find postgresql.conf
+  find:
+    paths: /etc/postgresql
+    patterns: 'postgresql.conf'
+    recurse: yes
+  register: pg_conf
+
+- name: Configure PostgreSQL listen_addresses
+  lineinfile:
+    path: "{{ pg_conf.files[0].path }}"
+    regexp: "^#?listen_addresses\\s*="
+    line: "listen_addresses = '{{ hostvars[inventory_hostname][\"ansible_host\"] }},localhost'"
+  notify: restart postgresql
+
+- name: Configure PostgreSQL port
+  lineinfile:
+    path: "{{ pg_conf.files[0].path }}"
+    regexp: "^#?port\\s*="
+    line: "port = {{ db_port }}"
+  notify: restart postgresql
+
+- name: Find pg_hba.conf
+  find:
+    paths: /etc/postgresql
+    patterns: 'pg_hba.conf'
+    recurse: yes
+  register: pg_hba
+
+- name: Configure pg_hba.conf to allow worker IP
+  lineinfile:
+    path: "{{ pg_hba.files[0].path }}"
+    line: "host    all             all             {{ hostvars[groups['workers'][0]]['ansible_host'] }}/32            md5"
+  notify: restart postgresql
+
+- name: Start and enable PostgreSQL
+  systemd:
+    name: postgresql
+    state: started
+    enabled: yes

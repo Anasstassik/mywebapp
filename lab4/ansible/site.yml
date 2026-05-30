@@ -1,0 +1,24 @@
+---
+- name: Common Setup
+  hosts: all
+  become: yes
+  roles:
+    - common
+
+- name: Database Setup
+  hosts: db
+  become: yes
+  roles:
+    - database
+
+- name: Webapp Setup
+  hosts: workers
+  become: yes
+  roles:
+    - webapp
+
+- name: Nginx Setup
+  hosts: workers
+  become: yes
+  roles:
+    - nginx

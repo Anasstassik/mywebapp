@@ -1,0 +1,27 @@
+---
+- name: Create teacher user
+  user:
+    name: teacher
+    password: "{{ '12345678' | password_hash('sha512') }}"
+    groups: sudo
+    append: yes
+    shell: /bin/bash
+
+- name: Enable PasswordAuthentication for SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication yes'
+  notify: restart sshd
+
+- name: Create student user (for gradebook)
+  user:
+    name: student
+    shell: /bin/bash
+
+- name: Create gradebook file
+  copy:
+    content: "{{ student_variant }}\n"
+    dest: /home/student/gradebook
+    owner: student
+    mode: '0644'

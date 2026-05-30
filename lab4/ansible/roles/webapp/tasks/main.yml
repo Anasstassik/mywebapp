@@ -1,0 +1,67 @@
+---
+- name: Create app user
+  user:
+    name: app
+    system: yes
+    shell: /bin/false
+
+- name: Create operator user
+  user:
+    name: operator
+    password: "{{ '12345678' | password_hash('sha512') }}"
+    shell: /bin/bash
+
+- name: Allow operator to restart webapp and reload nginx
+  template:
+    src: operator_sudoers.j2
+    dest: /etc/sudoers.d/operator
+    validate: 'visudo -cf %s'
+
+- name: Install Node.js and npm
+  apt:
+    name: 
+      - nodejs
+      - npm
+    state: present
+    update_cache: yes
+
+- name: Create webapp directory
+  file:
+    path: /opt/webapp
+    state: directory
+    owner: app
+    group: app
+
+- name: Copy webapp files
+  synchronize:
+    src: "../../../lab1-3/"
+    dest: /opt/webapp/
+    rsync_opts:
+      - "--exclude=node_modules"
+      - "--exclude=.git"
+
+- name: Change ownership of webapp directory
+  file:
+    path: /opt/webapp
+    owner: app
+    group: app
+    recurse: yes
+
+- name: Install dependencies
+  npm:
+    path: /opt/webapp
+  become: yes
+  become_user: app
+
+- name: Setup webapp systemd service
+  template:
+    src: webapp.service.j2
+    dest: /etc/systemd/system/webapp.service
+  notify: restart webapp
+
+- name: Start and enable webapp
+  systemd:
+    name: webapp
+    state: started
+    enabled: yes
+    daemon_reload: yes
