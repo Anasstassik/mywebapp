@@ -38,9 +38,11 @@ resource "libvirt_volume" "worker_vol" {
 
 # Worker VM (Web + Nginx)
 resource "libvirt_domain" "worker" {
-  name   = "lab4-worker"
-  memory = "1024"
-  vcpu   = 1
+  name    = "lab4-worker"
+  type    = "qemu"
+  machine = "pc"
+  memory  = "1024"
+  vcpu    = 1
 
   cloudinit = libvirt_cloudinit_disk.commoninit.id
 
@@ -76,9 +78,11 @@ resource "libvirt_volume" "db_vol" {
 
 # DB VM
 resource "libvirt_domain" "db" {
-  name   = "lab4-db"
-  memory = "1024"
-  vcpu   = 1
+  name    = "lab4-db"
+  type    = "qemu"
+  machine = "pc"
+  memory  = "1024"
+  vcpu    = 1
 
   cloudinit = libvirt_cloudinit_disk.commoninit.id
 
